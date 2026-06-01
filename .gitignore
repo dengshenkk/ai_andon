@@ -1,0 +1,12 @@
+# Build artifacts
+/AIAndon
+/AIAndon.app/
+/AI-Andon.dmg
+
+# macOS
+.DS_Store
+
+# Process files (not source code)
+/process.md
+/state.json
+/checklist.md
