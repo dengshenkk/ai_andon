@@ -1,0 +1,83 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          swiftc \
+            Sources/AIAndon/main.swift \
+            Sources/AIAndon/AppDelegate.swift \
+            Sources/AIAndon/SessionMonitor.swift \
+            Sources/AIAndon/StatusLightView.swift \
+            Sources/AIAndon/StatusLightWindow.swift \
+            Sources/AIAndon/MenuBarIcon.swift \
+            -o AIAndon \
+            -framework AppKit \
+            -framework Foundation \
+            -framework ServiceManagement \
+            -swift-version 5
+
+      - name: Create App Bundle
+        run: |
+          mkdir -p AIAndon.app/Contents/MacOS AIAndon.app/Contents/Resources
+          cp AIAndon AIAndon.app/Contents/MacOS/
+          cp Sources/AIAndon/Info.plist AIAndon.app/Contents/
+
+      - name: Codesign
+        run: |
+          codesign --force --deep --sign - AIAndon.app
+
+      - name: Create DMG
+        run: |
+          hdiutil create \
+            -volname "AI Andon" \
+            -srcfolder AIAndon.app \
+            -ov \
+            -format UDZO \
+            AI-Andon.dmg
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Andon
+          path: AI-Andon.dmg
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Sources/AIAndon/Info.plist)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: AI Andon v${{ steps.version.outputs.version }}
+          body: |
+            ## AI Andon v${{ steps.version.outputs.version }}
+
+            macOS 安灯应用，实时显示 Claude 会话状态。
+
+            | 状态 | 窗口灯 | 菜单栏 |
+            |------|--------|--------|
+            | busy | 🟢 绿灯常亮 | 绿色圆点 |
+            | idle | 🟡 黄灯闪烁 | 黄灰交替 |
+            | inactive | 🔴 红灯闪烁 | 红灰交替 |
+            | 无session | ⚫ 全灰 | 灰色圆点 |
+
+            ### 安装
+            1. 下载 `AI-Andon.dmg`
+            2. 挂载后拖拽到 Applications
+            3. 首次打开需在系统设置中允许
+          files: AI-Andon.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
