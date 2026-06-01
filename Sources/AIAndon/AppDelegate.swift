@@ -14,6 +14,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             applyLaunchAtLogin(newValue)
         }
     }
+    private var isVertical: Bool {
+        get {
+            let v = UserDefaults.standard.object(forKey: "WindowOrientation")
+            return v == nil ? true : UserDefaults.standard.bool(forKey: "WindowOrientation")
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "WindowOrientation")
+            lightWindow?.isVertical = newValue
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -49,6 +59,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         windowItem.state = showWindow ? .on : .off
         menu.addItem(windowItem)
 
+        let orientationItem = NSMenuItem(title: "水平方向", action: #selector(toggleOrientation(_:)), keyEquivalent: "")
+        orientationItem.state = isVertical ? .off : .on
+        menu.addItem(orientationItem)
+
         let launchItem = NSMenuItem(title: "开机自动启动", action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
         launchItem.state = launchAtLogin ? .on : .off
         menu.addItem(launchItem)
@@ -77,7 +91,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupLightWindow() {
         lightWindow = StatusLightWindow()
+        lightWindow?.isVertical = isVertical
         lightWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func toggleOrientation(_ sender: NSMenuItem) {
+        isVertical = !isVertical
+        sender.state = isVertical ? .off : .on
     }
 
     @objc private func toggleWindow(_ sender: NSMenuItem) {

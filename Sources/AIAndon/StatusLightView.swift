@@ -4,6 +4,9 @@ class StatusLightView: NSView {
     private var currentState: AndonState = .noSession
     private var blinkPhase: Bool = true
     private var blinkTimer: Timer?
+    var isVertical: Bool = true {
+        didSet { needsDisplay = true }
+    }
 
     private let greenColor = NSColor(red: 0.2, green: 0.85, blue: 0.3, alpha: 1.0)
     private let yellowColor = NSColor(red: 1.0, green: 0.8, blue: 0.0, alpha: 1.0)
@@ -47,12 +50,24 @@ class StatusLightView: NSView {
         let w = bounds.width
         let h = bounds.height
         let circleSize: CGFloat = 28
-        let spacing: CGFloat = h / 3.0
-        let centerY = h - spacing / 2.0
 
-        let greenCenter = CGPoint(x: w / 2, y: centerY)
-        let yellowCenter = CGPoint(x: w / 2, y: centerY - spacing)
-        let redCenter = CGPoint(x: w / 2, y: centerY - spacing * 2)
+        let greenCenter: CGPoint
+        let yellowCenter: CGPoint
+        let redCenter: CGPoint
+
+        if isVertical {
+            let spacing: CGFloat = h / 3.0
+            let centerY = h - spacing / 2.0
+            greenCenter = CGPoint(x: w / 2, y: centerY)
+            yellowCenter = CGPoint(x: w / 2, y: centerY - spacing)
+            redCenter = CGPoint(x: w / 2, y: centerY - spacing * 2)
+        } else {
+            let spacing: CGFloat = w / 3.0
+            let centerX = spacing / 2.0
+            greenCenter = CGPoint(x: centerX, y: h / 2)
+            yellowCenter = CGPoint(x: centerX + spacing, y: h / 2)
+            redCenter = CGPoint(x: centerX + spacing * 2, y: h / 2)
+        }
 
         func drawLight(center: CGPoint, activeColor: NSColor, isActive: Bool) {
             let color = isActive ? activeColor : offColor
