@@ -7,6 +7,13 @@ enum AndonState {
     case noSession
 }
 
+struct SessionInfo: Equatable {
+    let id: String
+    let pid: Int
+    let cwd: String
+    let status: AndonState
+}
+
 class SessionMonitor {
     private let sessionsPath: String
 
@@ -14,37 +21,50 @@ class SessionMonitor {
         sessionsPath = NSString(string: "~/.claude/sessions").expandingTildeInPath
     }
 
-    func updateState() -> AndonState {
+    func updateState() -> [SessionInfo] {
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: sessionsPath) else {
-            return .noSession
+            return []
         }
 
         let jsonFiles = files.filter { $0.hasSuffix(".json") }
-        guard !jsonFiles.isEmpty else { return .noSession }
+        guard !jsonFiles.isEmpty else { return [] }
 
-        var hasBusy = false
-        var hasIdle = false
+        var sessions: [SessionInfo] = []
 
         for file in jsonFiles {
             let path = (sessionsPath as NSString).appendingPathComponent(file)
             guard let data = FileManager.default.contents(atPath: path),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let status = json["status"] as? String else {
+                  let status = json["status"] as? String,
+                  let sessionId = json["sessionId"] as? String,
+                  let pid = json["pid"] as? Int else {
                 continue
             }
 
+            let cwd = json["cwd"] as? String ?? ""
+
+            guard kill(pid_t(pid), 0) == 0 else { continue }
+
+            let sessionStatus: AndonState
             switch status {
             case "busy":
-                hasBusy = true
+                sessionStatus = .busy
             case "idle":
-                hasIdle = true
+                sessionStatus = .idle
             default:
-                break
+                sessionStatus = .inactive
             }
+
+            sessions.append(SessionInfo(id: sessionId, pid: pid, cwd: cwd, status: sessionStatus))
         }
 
-        if hasBusy { return .busy }
-        if hasIdle { return .idle }
+        return sessions.sorted { $0.id < $1.id }
+    }
+
+    static func aggregateState(_ sessions: [SessionInfo]) -> AndonState {
+        if sessions.isEmpty { return .noSession }
+        if sessions.contains(where: { $0.status == .idle }) { return .idle }
+        if sessions.allSatisfy({ $0.status == .busy }) { return .busy }
         return .inactive
     }
 }

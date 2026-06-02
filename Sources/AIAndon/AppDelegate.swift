@@ -35,7 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             setupLightWindow()
         }
 
-        timer = Timer(timeInterval: 1.0 / 60.0, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
+        timer = Timer(timeInterval: 0.1, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         RunLoop.main.add(timer!, forMode: .common)
     }
 
@@ -115,9 +115,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func tick() {
-        let state = monitor.updateState()
-        lightWindow?.updateState(state)
-        menuBarController.updateState(state)
+        let sessions = monitor.updateState()
+        let aggregate = SessionMonitor.aggregateState(sessions)
+        lightWindow?.updateSessions(sessions)
+        menuBarController.updateState(aggregate)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
