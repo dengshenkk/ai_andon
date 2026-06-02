@@ -77,7 +77,10 @@ class StatusLightView: NSView {
             let dx = point.x - center.x
             let dy = point.y - center.y
             if dx * dx + dy * dy <= hitRadius * hitRadius {
-                focusTerminal(pid: Int32(sessions[i].pid))
+                let pid = Int32(sessions[i].pid)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    self.focusTerminal(pid: pid)
+                }
                 return
             }
         }
@@ -127,6 +130,7 @@ class StatusLightView: NSView {
     }
 
     private func focusTerminal(pid: Int32) {
+        let tty = ttyOfProcess(pid)
         var currentPid = pid
         for _ in 0..<8 {
             guard let app = NSRunningApplication(processIdentifier: currentPid) else {
@@ -161,8 +165,7 @@ class StatusLightView: NSView {
                 execName.contains("hyper")
 
             if isTerminal {
-                app.activate()
-                unminimizeWindows(bundleId: bundleId, appName: app.localizedName ?? "")
+                activateTerminalWindow(bundleId: bundleId, tty: tty)
                 return
             }
 
@@ -171,24 +174,93 @@ class StatusLightView: NSView {
         }
     }
 
-    private func unminimizeWindows(bundleId: String, appName: String) {
-        guard !bundleId.isEmpty else { return }
+    private func activateTerminalWindow(bundleId: String, tty: String?) {
+        let ttyName = tty?.replacingOccurrences(of: "/dev/", with: "") ?? ""
 
-        let script = """
-        tell application id "\(bundleId)"
-            activate
-            try
-                set miniaturized of every window to false
-            end try
-        end tell
-        """
+        let script: String
+        if bundleId == "com.googlecode.iterm2" && !ttyName.isEmpty {
+            script = """
+            tell application "iTerm2"
+                set found to false
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        repeat with s in sessions of t
+                            try
+                                if tty of s contains "\(ttyName)" then
+                                    select s
+                                    select t
+                                    set index of w to 1
+                                    set found to true
+                                    exit repeat
+                                end if
+                            end try
+                        end repeat
+                        if found then exit repeat
+                    end repeat
+                    if found then exit repeat
+                end repeat
+                if found then activate
+            end tell
+            """
+        } else if bundleId == "com.apple.terminal" && !ttyName.isEmpty {
+            script = """
+            tell application "Terminal"
+                set found to false
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        try
+                            if tty of t contains "\(ttyName)" then
+                                set selected of t to true
+                                set index of w to 1
+                                set found to true
+                                exit repeat
+                            end if
+                        end try
+                    end repeat
+                    if found then exit repeat
+                end repeat
+                if found then activate
+            end tell
+            """
+        } else {
+            script = """
+            tell application id "\(bundleId)"
+                activate
+                try
+                    set miniaturized of every window to false
+                end try
+            end tell
+            """
+        }
 
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.main.async {
             if let appleScript = NSAppleScript(source: script) {
                 var error: NSDictionary?
                 appleScript.executeAndReturnError(&error)
             }
         }
+    }
+
+    private func ttyOfProcess(_ pid: Int32) -> String? {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        task.arguments = ["-p", String(pid)]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else { return nil }
+            for line in output.components(separatedBy: "\n") {
+                if line.contains("/dev/ttys") {
+                    let parts = line.split(separator: " ")
+                    if let last = parts.last { return String(last) }
+                }
+            }
+        } catch {}
+        return nil
     }
 
     private func parentPid(of pid: Int32) -> Int32 {

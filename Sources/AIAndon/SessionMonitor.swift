@@ -42,14 +42,18 @@ class SessionMonitor {
             }
 
             let cwd = json["cwd"] as? String ?? ""
+            let kind = json["kind"] as? String ?? "interactive"
 
-            guard kill(pid_t(pid), 0) == 0 else { continue }
+            guard kind == "interactive" else { continue }
+
+            guard kill(pid_t(pid), 0) == 0,
+                  isClaudeProcess(pid_t(pid)) else { continue }
 
             let sessionStatus: AndonState
             switch status {
             case "busy":
                 sessionStatus = .busy
-            case "idle":
+            case "idle", "waiting":
                 sessionStatus = .idle
             default:
                 sessionStatus = .inactive
@@ -66,5 +70,12 @@ class SessionMonitor {
         if sessions.contains(where: { $0.status == .idle }) { return .idle }
         if sessions.allSatisfy({ $0.status == .busy }) { return .busy }
         return .inactive
+    }
+
+    private func isClaudeProcess(_ pid: pid_t) -> Bool {
+        var buf = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(pid, &buf, UInt32(buf.count)) > 0 else { return false }
+        let path = String(cString: buf)
+        return path.contains("/claude/")
     }
 }
